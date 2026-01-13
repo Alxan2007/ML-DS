@@ -1,34 +1,102 @@
 import pandas as pd
-import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
 
-# Загрузка данных из CSV‑файла в DataFrame
-df = pd.read_csv('sales.csv')
-df['revenue'] = df['price'] * df['quantity']
-most_expensive = df.loc[df['price'].idxmax()]
-# Проверка на наличие дубликатов в данных
-duplicates = df[df.duplicated()]
+
+
+titanic = pd.read_csv('titanic.csv')
+
+
+titanic['Age'] = titanic['Age'].fillna(
+    titanic.groupby(['Sex', 'Pclass'])['Age'].transform('median')
+)
+titanic.drop('Cabin', axis=1, inplace=True)
+
+
+duplicates = titanic[titanic.duplicated()]
 if len(duplicates) > 0:
-    print('Duplicates')
+    print(duplicates)
 else:
-    print('No duplicates')
-print(df.isnull().sum())
-print("Данные о продажах:")
-print(df)
-# Вывод таблицы с названиями товаров и соответствующей выручкой
-print("\nОбщая выручка по товарам:")
-print(df[['product', 'revenue']])
-# Вывод информации о самом дорогом товаре
-print("\nСамый дорогой товар:")
-print(f"Название: {most_expensive['product']}")
-print(f"Цена за единицу: {most_expensive['price']}")
+    print('No Duplicates')
 
-plt.figure(figsize=(10, 6))
-plt.bar(df['product'], df['revenue'], color='skyblue', edgecolor='navy', alpha=0.7)
-plt.title('Выручка по товарам', fontsize=16, fontweight='bold')
-plt.xlabel('Товар', fontsize=12)
-plt.ylabel('Выручка (руб.)', fontsize=12)
 
-plt.xticks(rotation=45)
-plt.grid(axis='y', linestyle='--', alpha=0.3)
-plt.tight_layout()
+titanic['family_size'] = titanic['SibSp'] + titanic['Parch'] + 1
+
+print(titanic.isnull().sum())
+print((titanic.isnull().mean() * 100).round(1))
+
+
+
+
+X = titanic[['Pclass', 'Sex', 'Age', 'Fare', 'family_size', 'Embarked']]
+y = titanic['Survived']
+
+X = pd.get_dummies(X, columns=['Sex', 'Embarked'], drop_first=True)
+
+
+
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+logreg = LogisticRegression(max_iter=300, random_state=42)
+logreg.fit(X_train, y_train)
+y_pred = logreg.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+print("\nМетрики логистической регрессии:")
+print(accuracy)
+print(precision)
+print(recall)
+print(f1)
+
+
+from sklearn.metrics import ConfusionMatrixDisplay
+from matplotlib import pyplot as plt
+ConfusionMatrixDisplay.from_predictions(y_test, y_pred).plot()
+plt.title("Матрица ошибок")
+plt.savefig('survival_plot.pdf', bbox_inches='tight')
 plt.show()
+
+
+
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+
+metrics = {
+    'Accuracy': accuracy_score(y_test, y_pred),
+    'Precision': precision_score(y_test, y_pred),
+    'Recall': recall_score(y_test, y_pred),
+    'F1-score': f1_score(y_test, y_pred)
+}
+
+plt.figure(figsize=(8, 6))
+plt.bar(metrics.keys(), metrics.values())
+plt.ylabel("Score")
+plt.title("Classification Metrics")
+plt.ylim(0, 1)
+plt.savefig('survival_plot.pdf', bbox_inches='tight')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
