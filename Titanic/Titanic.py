@@ -1,87 +1,97 @@
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.impute import SimpleImputer
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-import xgboost as xgb
 import pandas as pd
-import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_curve, auc
+from xgboost import XGBClassifier
 
-# Загрузка данных
-price_for_house = pd.read_csv('train.csv')
-X = price_for_house.drop(columns=['SalePrice'])
-y = price_for_house['SalePrice']
 
-# Кодирование категориальных признаков
-X = pd.get_dummies(X, drop_first=True)
+titanic = pd.read_csv('Titanic/titanic.csv')
 
-# Проверка дубликатов
-duplicates = X[X.duplicated()]
+
+
+titanic.drop('Cabin', axis=1, inplace=True)
+
+
+duplicates = titanic[titanic.duplicated()]
 if len(duplicates) > 0:
-    print("Найдены дубликаты:", len(duplicates))
+    print(duplicates)
 else:
-    print("Дубликатов нет")
+    print('No Duplicates')
 
-# Заполнение пропусков
-imputer = SimpleImputer(strategy='median')
-X_imputed = imputer.fit_transform(X)
-X_imputed = pd.DataFrame(X_imputed, columns=X.columns)  # Сохраняем имена столбцов
 
-# Разделение на обучающую и тестовую выборки
-X_train, X_test, y_train, y_test = train_test_split(
-    X_imputed, y, test_size=0.2, random_state=42
-)
+titanic['family_size'] = titanic['SibSp'] + titanic['Parch'] + 1
+titanic = titanic.dropna(subset=['Age'])
 
-# Масштабирование (для XGBoost и LinearRegression)
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+X = titanic[['Pclass', 'Sex', 'Age', 'Fare', 'family_size', 'Embarked']]
+y = titanic['Survived']
 
-# --- Обучение моделей ---
+X = pd.get_dummies(X, columns=['Sex', 'Embarked'], drop_first=True)
 
-# 1. XGBoost
-model_xgb = xgb.XGBRegressor(n_estimators=100, random_state=42, verbosity=0)
-model_xgb.fit(X_train_scaled, y_train)
-y_pred_xgb = model_xgb.predict(X_test_scaled)
-r2_xgb = r2_score(y_test, y_pred_xgb)
 
-# 2. Random Forest
-model_rf = RandomForestRegressor(n_estimators=100, random_state=42, max_depth=None)
-model_rf.fit(X_train, y_train)  # Не требует масштабирования
-y_pred_rf = model_rf.predict(X_test)
-r2_rf = r2_score(y_test, y_pred_rf)
 
-# 3. Linear Regression (с масштабированием)
-model_lr = LinearRegression()
-model_lr.fit(X_train_scaled, y_train)
-y_pred_lr = model_lr.predict(X_test_scaled)
-r2_lr = r2_score(y_test, y_pred_lr)
 
-# --- Визуализация: Фактические vs Предсказанные ---
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-fig.suptitle('Фактические vs Предсказанные значения', fontsize=16)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42, stratify=y)
+logreg = RandomForestClassifier(n_estimators=100, random_state=42)
+logreg.fit(X_train, y_train)
+y_pred = logreg.predict(X_test)
+y_proba = logreg.predict_proba(X_test)[:, 1]
 
-models = [
-    ('XGBoost', y_pred_xgb, r2_xgb),
-    ('Random Forest', y_pred_rf, r2_rf),
-    ('Linear Regression', y_pred_lr, r2_lr)
-]
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
 
-for idx, (name, y_pred_model, r2_model) in enumerate(models):
-    ax = axes[idx]
-    ax.scatter(y_test, y_pred_model, alpha=0.6, color='teal', edgecolors='none', s=20)
-    ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2, label='Идеальные предсказания')
-    ax.set_xlabel('Фактические значения')
-    ax.set_ylabel('Предсказанные значения')
-    ax.set_title(f'{name}\n$R^2 = {r2_model:.3f}$')
-    ax.grid(True, alpha=0.3)
-    ax.legend()
 
-plt.tight_layout()
+print("\nМетрики логистической регрессии:")
+print(accuracy)
+print(precision)
+print(recall)
+print(f1)
+
+fpr, tpr, threshold = roc_curve(y_test, y_pred)
+roc_auc = auc(fpr, tpr)
+
+
+from matplotlib import pyplot as plt
+
+plt.figure(figsize=(8, 6))
+plt.plot(fpr, tpr, color='darkorange', label=f'ROC-кривая {roc_auc:.2f}', lw = 2)
+plt.plot([0, 1], [0 , 1], color = 'navy', lw = 2, linestyle = '--', label = "Случайные числа")
+plt.xlim([0.0, 1.0])
+plt.ylim([0.0, 1.05])
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver operating characteristic')
+plt.legend(loc="lower right")
+plt.grid(True)
 plt.show()
 
-# Вывод метрик в консоль
-print(f"XGBoost R²: {r2_xgb:.3f}")
-print(f"Random Forest R²: {r2_rf:.3f}")
-print(f"Linear Regression R²: {r2_lr:.3f}")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
